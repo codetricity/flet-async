@@ -31,21 +31,64 @@ jobs:
       - name: Setup Git LFS
         run: |
           git lfs install
-          git lfs pull
+          git lfs version
 
-      - name: Verify LFS files
+      - name: Pull and verify LFS files
         run: |
-          echo "Checking LFS files..."
+          echo "Pulling LFS files..."
+          git lfs pull --include="assets/app/app.zip"
+
+          # Explicitly checkout/smudge the LFS file to ensure it's actual content
+          git lfs checkout assets/app/app.zip
+
+          # List LFS files to verify
+          echo "LFS tracked files:"
           git lfs ls-files
+
+          # Check LFS pointer info
+          echo "Checking LFS pointer information..."
+          git lfs pointer --file=assets/app/app.zip || true
+
+          # Verify the file is not a pointer
+          if head -n 1 assets/app/app.zip | grep -q "version https://git-lfs"; then
+            echo "ERROR: File is still a pointer, attempting to fetch all LFS objects..."
+            git lfs fetch --all
+            git lfs checkout assets/app/app.zip
+            
+            # Check again after fetch
+            if head -n 1 assets/app/app.zip | grep -q "version https://git-lfs"; then
+              echo "ERROR: File is still a pointer after fetch. LFS content may not be available."
+              echo "This usually means the LFS file content was not pushed to GitHub."
+              echo "To fix this, ensure you've run: git lfs push --all origin main"
+              exit 1
+            fi
+          fi
+
+      - name: Verify LFS files are actual content
+        run: |
+          echo "Verifying LFS files..."
           if [ -f "assets/app/app.zip" ]; then
             echo "✓ app.zip exists"
-            file assets/app/app.zip
+            file_type=$(file assets/app/app.zip)
+            echo "File type: $file_type"
+            file_size=$(stat -f%z assets/app/app.zip 2>/dev/null || stat -c%s assets/app/app.zip 2>/dev/null || echo "unknown")
+            echo "File size: $file_size bytes"
+            
+            # Check if it's a pointer file (LFS pointer files start with "version https://git-lfs")
+            if head -n 1 assets/app/app.zip | grep -q "version https://git-lfs"; then
+              echo "✗ ERROR: app.zip is still a Git LFS pointer file, not actual content!"
+              echo "This means the file content is not in LFS storage."
+              echo "First 50 bytes:"
+              head -c 50 assets/app/app.zip
+              exit 1
+            fi
+            
             # Verify it's actually a zip file
-            if file assets/app/app.zip | grep -q "Zip archive"; then
+            if file assets/app/app.zip | grep -qE "(Zip archive|compressed)"; then
               echo "✓ app.zip is a valid zip file"
             else
               echo "✗ ERROR: app.zip is not a valid zip file!"
-              echo "File type: $(file assets/app/app.zip)"
+              echo "File type: $file_type"
               exit 1
             fi
           else
