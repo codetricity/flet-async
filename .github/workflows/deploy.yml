@@ -1,0 +1,67 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Setup Git LFS
+        run: |
+          git lfs install
+          git lfs pull
+
+      - name: Verify LFS files
+        run: |
+          echo "Checking LFS files..."
+          git lfs ls-files
+          if [ -f "assets/app/app.zip" ]; then
+            echo "✓ app.zip exists"
+            file assets/app/app.zip
+            # Verify it's actually a zip file
+            if file assets/app/app.zip | grep -q "Zip archive"; then
+              echo "✓ app.zip is a valid zip file"
+            else
+              echo "✗ ERROR: app.zip is not a valid zip file!"
+              echo "File type: $(file assets/app/app.zip)"
+              exit 1
+            fi
+          else
+            echo "✗ ERROR: app.zip not found!"
+            exit 1
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
