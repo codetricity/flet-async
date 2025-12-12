@@ -28,10 +28,22 @@ globalThis.jsConnect = async function(appId, args, dartOnMessage) {
 
     let pythonInitialized = new Promise((resolveCallback) => app.onPythonInitialized = resolveCallback);
 
+    // Merge dependencies from flet config into args if they exist
+    let mergedArgs = args || {};
+    if (flet.dependencies && Array.isArray(flet.dependencies)) {
+        mergedArgs = { ...mergedArgs };
+        if (mergedArgs.dependencies) {
+            // Merge with existing dependencies, avoiding duplicates
+            mergedArgs.dependencies = [...new Set([...mergedArgs.dependencies, ...flet.dependencies])];
+        } else {
+            mergedArgs.dependencies = flet.dependencies;
+        }
+    }
+
     // initialize worker
     app.worker.postMessage({
         pyodideUrl: flet.noCdn ? flet.pyodideUrl : defaultPyodideUrl,
-        args: args,
+        args: mergedArgs,
         documentUrl: _documentUrl,
         appPackageUrl: flet.appPackageUrl,
         micropipIncludePre: flet.micropipIncludePre,
